@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="Mål e-postsikkerheten for et domene med DNSSEC, SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DANE/TLSA, CAA, BIMI, MX, IPv6, DNS og HTTPS-sertifikat." />
+  <meta name="theme-color" content="#07111f" />
+  <title>Mail Security Score – e-postsikkerhet på 100 poeng</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Mail Security Score forside">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" role="img"><path d="M16 2.5 27 7v8.2c0 6.7-4.1 11.8-11 14.3C9.1 27 5 21.9 5 15.2V7l11-4.5Z" fill="currentColor"/><path d="M10 11.2h12v8.4H10z" fill="#07111f"/><path d="m10.8 12.2 5.2 4 5.2-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        </span>
+        <span>Mail Security Score</span>
+      </a>
+      <nav class="topnav" aria-label="Hovedmeny">
+        <a href="#checker">Sjekk domene</a>
+        <a href="#scoreDetails">Poengmodell</a>
+        <a href="#about">Om kontrollen</a>
+      </nav>
+      <div class="privacy-pill"><span class="dot"></span> Offentlig DNS i sanntid</div>
+    </header>
+
+    <main>
+      <section class="hero" id="checker">
+        <div class="hero-copy">
+          <p class="eyebrow">E-postsikkerhet på 100 poeng</p>
+          <h1>Hvor godt er domenet<br /><span>beskyttet?</span></h1>
+          <p class="lede">Få en samlet helsescore for DNS, e-postautentisering og sikker transport – med tre prioriterte forbedringer du kan gjøre først.</p>
+        </div>
+
+        <form id="scanForm" class="scan-card" autocomplete="off">
+          <label for="domainInput">Domenenavn</label>
+          <div class="domain-row">
+            <span class="input-icon" aria-hidden="true">◎</span>
+            <input id="domainInput" name="domain" type="text" inputmode="url" placeholder="eksempel.no" spellcheck="false" required />
+            <button class="primary-button" id="scanButton" type="submit">
+              <span>Mål sikkerheten</span>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <div class="advanced-row">
+            <label class="selector-label" for="dkimSelector">DKIM-selector <span>(valgfritt)</span></label>
+            <input id="dkimSelector" type="text" placeholder="f.eks. selector1, google, s1" spellcheck="false" />
+            <label class="toggle"><input id="scanCommonSelectors" type="checkbox" checked /><span></span> Sjekk vanlige selectorer</label>
+          </div>
+          <p class="form-note">DNS-oppslag gjøres fra nettleseren via Cloudflare DNS-over-HTTPS. Sertifikatkontrollen bruker nettleserens egen TLS-validering. Ingen konto eller API-nøkkel kreves.</p>
+        </form>
+      </section>
+
+      <section id="loading" class="loading-panel hidden" aria-live="polite">
+        <div class="spinner"></div>
+        <div><strong>Beregner Mail Security Score …</strong><span id="loadingText">Slår opp DNS-poster</span></div>
+      </section>
+      <section id="errorPanel" class="error-panel hidden" role="alert"></section>
+
+      <section id="results" class="results hidden" aria-live="polite">
+        <div class="results-head score-results-head">
+          <div>
+            <p class="eyebrow">Mail Security Score</p>
+            <h2 id="resultDomain">eksempel.no</h2>
+            <p id="scanTime" class="muted"></p>
+          </div>
+          <div class="score-wrap score-wrap-large">
+            <div class="score-ring score-ring-large" id="scoreRing"><span id="scoreNumber">0</span><small>/100</small></div>
+            <div><strong id="scoreLabel">Sjekker</strong><span>E-postsikkerhet</span></div>
+          </div>
+        </div>
+
+        <section class="recommendations-strip" aria-labelledby="recommendationsTitle">
+          <div class="recommendations-title">
+            <div><p class="section-kicker">Prioritert handlingsplan</p><h3 id="recommendationsTitle"><span id="recommendationCount">3</span> anbefalte forbedringer</h3></div>
+            <span class="potential-badge" id="potentialBadge">Mulig +0 poeng</span>
+          </div>
+          <div id="topRecommendations" class="recommendation-grid"></div>
+        </section>
+
+        <div id="summaryGrid" class="summary-grid score-summary-grid"></div>
+
+        <div class="content-grid">
+          <div>
+            <section class="panel" id="scoreDetails">
+              <div class="panel-head">
+                <div><p class="section-kicker">Slik bygges scoren</p><h3>Poeng per sikkerhetskontroll</h3></div>
+                <span class="count-badge">13 kontroller</span>
+              </div>
+              <div id="scoreBreakdown" class="score-breakdown"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div><p class="section-kicker">Full oversikt</p><h3>Tekniske resultater</h3></div>
+                <button id="expandAll" class="ghost-button" type="button">Vis alle</button>
+              </div>
+              <div id="checksList" class="checks-list"></div>
+            </section>
+          </div>
+
+          <aside>
+            <section class="panel compact-panel">
+              <div class="panel-head"><div><p class="section-kicker">E-postinfrastruktur</p><h3>MX-servere</h3></div></div>
+              <div id="mxList" class="mini-list"></div>
+            </section>
+
+            <section class="panel compact-panel">
+              <div class="panel-head"><div><p class="section-kicker">DNS-grunnlag</p><h3>Domeneoversikt</h3></div></div>
+              <dl id="dnsOverview" class="overview-list"></dl>
+            </section>
+
+            <section class="panel compact-panel export-card">
+              <div class="export-icon">↓</div>
+              <div><h3>Eksporter rapport</h3><p>Lagre score, anbefalinger og tekniske funn som JSON.</p></div>
+              <button id="exportJson" class="secondary-button" type="button">Last ned JSON</button>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section class="features" id="about">
+        <div class="features-title"><p class="eyebrow">Fra DNS til sikker transport</p><h2>Én score som viser hvor du bør starte</h2></div>
+        <div class="feature-grid">
+          <article><span>01</span><h3>Autentisering</h3><p>SPF, DKIM og DMARC vektes høyt fordi de er sentrale for å motvirke spoofing og domenemisbruk.</p></article>
+          <article><span>02</span><h3>Transport</h3><p>MTA-STS, TLS-RPT og DANE/TLSA vurderer hvor godt domenet beskytter e-post på vei mellom servere.</p></article>
+          <article><span>03</span><h3>Robusthet</h3><p>DNSSEC, MX-redundans, IPv6, CAA, DNS-konfigurasjon og HTTPS/TLS gir et bredere bilde av domenets tekniske helse.</p></article>
+        </div>
+      </section>
+
+      <section class="coffee-section" aria-labelledby="coffeeTitle">
+        <div class="coffee-card">
+          <div class="coffee-copy">
+            <div class="coffee-icon" aria-hidden="true">☕</div>
+            <div>
+              <p class="eyebrow">Nyttig verktøy?</p>
+              <h2 id="coffeeTitle">Spander meg en kaffe</h2>
+              <p>Mail Security Score er gratis å bruke. Hvis tjenesten sparer deg tid, kan du støtte videre utvikling med en liten kaffe.</p>
+            </div>
+          </div>
+          <div class="coffee-action">
+            <div class="coffee-price"><strong>20,- kr</strong><span>Én valgfri støttebetaling</span></div>
+            <a class="coffee-button" href="https://qr.vipps.no/box/90e4bd01-a470-474a-98fa-8b48f69b0f4e/pay-in" target="_blank" rel="noopener noreferrer" aria-label="Spander en kaffe med Vipps">
+              <span>☕ Spander 20 kr med Vipps</span>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </a>
+            <p class="coffee-note">Betalingen åpnes i Vipps. Takk for at du støtter videre utvikling.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Mail Security Score</span>
+      <p>Resultatet er en automatisk vurdering av offentlig DNS og nettleserens TLS-tilkobling på tidspunktet for kontrollen. DKIM kan kreve at korrekt selector oppgis.</p>
+    </footer>
+  </div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
