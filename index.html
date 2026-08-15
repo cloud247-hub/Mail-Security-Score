@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+
+<html lang="no">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<meta content="Mål e-postsikkerheten for et domene med DNSSEC, SPF, DKIM, DMARC, MTA-STS, TLS-RPT, DANE/TLSA, CAA, BIMI, MX, IPv6, DNS og HTTPS-sertifikat." name="description"/>
+<meta content="#061A2F" name="theme-color"/>
+<title>Mail Security Score – e-postsikkerhet på 100 poeng</title>
+<link href="assets/favicon.svg" rel="icon" type="image/svg+xml"/><link href="./styles.css" rel="stylesheet"/><link href="cloud247-theme.css" rel="stylesheet"/>
+</head>
+<body>
+<div class="app-shell">
+<header class="site-header"><div class="shell header-inner"><a aria-label="Cloud247 forside" class="cloud-brand" href="https://cloud247.no/"><img alt="Cloud247 Technology" src="assets/cloud247-logo.svg"/></a><span class="header-label">Mail Security Score</span></div></header>
+<main>
+<section class="cloud-hero" id="top">
+<div class="shell cloud-hero-inner">
+<div class="cloud-hero-copy">
+<p class="cloud-eyebrow">CLOUD TOOLBOX</p>
+<h1>Mail Security Score</h1>
+<p>Mål e-postsikkerheten på 0–100 og se hvilke forbedringer som gir størst effekt først.</p>
+</div>
+<form autocomplete="off" class="scan-card cloud-panel hero-action-card" id="scanForm">
+<div class="hero-card-heading">
+<p class="hero-card-kicker">E-POSTSIKKERHET</p>
+<h2>Sjekk domene</h2>
+<p>Få en samlet sikkerhetsscore og en prioritert handlingsplan.</p>
+</div>
+<label for="domainInput">Domenenavn</label>
+<div class="domain-row">
+<span aria-hidden="true" class="input-icon">◎</span>
+<input id="domainInput" inputmode="url" name="domain" placeholder="eksempel.no" required="" spellcheck="false" type="text"/>
+<button class="primary-button" id="scanButton" type="submit">
+<span>Mål sikkerheten</span>
+<svg aria-hidden="true" viewbox="0 0 20 20"><path d="M4 10h11m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path></svg>
+</button>
+</div>
+<div class="advanced-row">
+<label class="selector-label" for="dkimSelector">DKIM-selector <span>(valgfritt)</span></label>
+<input id="dkimSelector" placeholder="f.eks. selector1, google, s1" spellcheck="false" type="text"/>
+<label class="toggle"><input checked="" id="scanCommonSelectors" type="checkbox"/><span></span> Sjekk vanlige selectorer</label>
+</div>
+<p class="form-note">DNS-oppslag gjøres fra nettleseren via Cloudflare DNS-over-HTTPS. Sertifikatkontrollen bruker nettleserens egen TLS-validering. Ingen konto eller API-nøkkel kreves.</p>
+</form>
+</div>
+</section>
+<section aria-live="polite" class="loading-panel hidden" id="loading">
+<div class="spinner"></div>
+<div><strong>Beregner Mail Security Score …</strong><span id="loadingText">Slår opp DNS-poster</span></div>
+</section>
+<section class="error-panel hidden" id="errorPanel" role="alert"></section>
+<section aria-live="polite" class="results hidden" id="results">
+<div class="results-head score-results-head">
+<div>
+<p class="eyebrow">Mail Security Score</p>
+<h2 id="resultDomain">eksempel.no</h2>
+<p class="muted" id="scanTime"></p>
+</div>
+<div class="score-wrap score-wrap-large">
+<div class="score-ring score-ring-large" id="scoreRing"><span id="scoreNumber">0</span><small>/100</small></div>
+<div><strong id="scoreLabel">Sjekker</strong><span>E-postsikkerhet</span></div>
+</div>
+</div>
+<section aria-labelledby="recommendationsTitle" class="recommendations-strip">
+<div class="recommendations-title">
+<div><p class="section-kicker">Prioritert handlingsplan</p><h3 id="recommendationsTitle"><span id="recommendationCount">3</span> anbefalte forbedringer</h3></div>
+<span class="potential-badge" id="potentialBadge">Mulig +0 poeng</span>
+</div>
+<div class="recommendation-grid" id="topRecommendations"></div>
+</section>
+<div class="summary-grid score-summary-grid" id="summaryGrid"></div>
+<div class="content-grid">
+<div>
+<section class="panel" id="scoreDetails">
+<div class="panel-head">
+<div><p class="section-kicker">Slik bygges scoren</p><h3>Poeng per sikkerhetskontroll</h3></div>
+<span class="count-badge">13 kontroller</span>
+</div>
+<div class="score-breakdown" id="scoreBreakdown"></div>
+</section>
+<section class="panel">
+<div class="panel-head">
+<div><p class="section-kicker">Full oversikt</p><h3>Tekniske resultater</h3></div>
+<button class="ghost-button" id="expandAll" type="button">Vis alle</button>
+</div>
+<div class="checks-list" id="checksList"></div>
+</section>
+</div>
+<aside>
+<section class="panel compact-panel">
+<div class="panel-head"><div><p class="section-kicker">E-postinfrastruktur</p><h3>MX-servere</h3></div></div>
+<div class="mini-list" id="mxList"></div>
+</section>
+<section class="panel compact-panel">
+<div class="panel-head"><div><p class="section-kicker">DNS-grunnlag</p><h3>Domeneoversikt</h3></div></div>
+<dl class="overview-list" id="dnsOverview"></dl>
+</section>
+<section class="panel compact-panel export-card">
+<div class="export-icon">↓</div>
+<div><h3>Eksporter rapport</h3><p>Lagre score, anbefalinger og tekniske funn som JSON.</p></div>
+<button class="secondary-button" id="exportJson" type="button">Last ned JSON</button>
+</section>
+</aside>
+</div>
+</section>
+<section class="features" id="about">
+<div class="features-title"><p class="eyebrow">Fra DNS til sikker transport</p><h2>Én score som viser hvor du bør starte</h2></div>
+<div class="feature-grid">
+<article><span>01</span><h3>Autentisering</h3><p>SPF, DKIM og DMARC vektes høyt fordi de er sentrale for å motvirke spoofing og domenemisbruk.</p></article>
+<article><span>02</span><h3>Transport</h3><p>MTA-STS, TLS-RPT og DANE/TLSA vurderer hvor godt domenet beskytter e-post på vei mellom servere.</p></article>
+<article><span>03</span><h3>Robusthet</h3><p>DNSSEC, MX-redundans, IPv6, CAA, DNS-konfigurasjon og HTTPS/TLS gir et bredere bilde av domenets tekniske helse.</p></article>
+</div>
+</section>
+<section class="more-tools-section"><div class="shell"><div class="more-tools-card"><div><p class="cloud-eyebrow">CLOUD TOOLBOX</p><h2>Se mine andre verktøy</h2><p>Flere enkle verktøy for Microsoft 365, Intune, e-post og domenesikkerhet.</p></div><a class="tools-button" href="https://cloud247.no/">Gå til Cloud247 <span aria-hidden="true">→</span></a></div></div></section>
+</main>
+<footer class="cloud-footer"><div class="shell footer-inner"><span>© 2026 Cloud247</span><a href="https://cloud247.no/">cloud247.no</a></div></footer>
+</div>
+<script defer="" src="./app.js"></script>
+</body>
+</html>
