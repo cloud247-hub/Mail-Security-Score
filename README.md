@@ -20,6 +20,16 @@ En statisk, norsk webapp som gir et domene en e-postsikkerhetsscore fra 0 til 10
 
 Appen viser også de tre forbedringene som kan gi størst poengmessig gevinst.
 
+## GitHub Pages
+
+1. Last opp innholdet i denne mappen til roten av et GitHub-repository.
+2. Gå til **Settings → Pages**.
+3. Velg **Deploy from a branch**.
+4. Velg `main` og `/(root)`.
+5. Lagre.
+
+Alle filstier er relative, så appen fungerer både på `bruker.github.io` og under en repository-sti som `bruker.github.io/mail-security-score/`.
+
 ## Datakilder og begrensninger
 
 DNS-oppslag gjøres direkte fra nettleseren mot Cloudflare DNS-over-HTTPS (`application/dns-json`).
@@ -29,3 +39,12 @@ DKIM-selectorer er ikke standardiserte. En manglende nøkkel blant vanlige selec
 DANE/TLSA kontrolleres på `_25._tcp.<mx-host>` og vurderes sammen med DNSSEC-validering.
 
 Sertifikatkontrollen bruker en `no-cors` HTTPS-forespørsel for å se om nettleseren klarer en betrodd TLS-tilkobling til rotdomenet. En ren statisk side kan ikke lese sertifikatets utløpsdato eller inspisere SMTP STARTTLS-sertifikatet direkte. For full SMTP-sertifikatanalyse anbefales en liten backend eller en dedikert TLS-API.
+
+## Cloud247-design
+
+Denne utgaven bruker samme visuelle system som Cloud247 CAA Record Generator: Cloud247-logo, mørkeblå/gul header og hero, panelstil, responsiv mobilvisning og lenke til øvrige verktøy på `https://cloud247.no/`. Logoen er sentrert på mobil. Eksisterende verktøyfunksjonalitet er beholdt.
+
+
+## Språk / Language
+
+Brukergrensesnittet støtter norsk og engelsk via **NO / EN**-velgeren i toppfeltet. Valget lagres lokalt i nettleseren med `localStorage`-nøkkelen `cloud247.language`, slik at språkvalget beholdes ved neste besøk på samme app. Ingen server eller ekstra API brukes for oversettelse.

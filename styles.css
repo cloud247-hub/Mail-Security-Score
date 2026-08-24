@@ -274,3 +274,12 @@ footer p { color:var(--muted); font-size:11px; }
   .score-row .score-bar { grid-column:1/-1; grid-row:2; }
   .score-points { grid-column:2; grid-row:1; }
 }
+
+
+/* Cloud247 bilingual language switch */
+.cloud247-language-switch{display:inline-flex;align-items:center;gap:4px;margin-left:auto;padding:4px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.06);flex:0 0 auto;z-index:4}
+.cloud247-language-button{appearance:none;border:0;border-radius:9px;background:transparent;color:#c5d0db;font:inherit;font-size:.78rem;font-weight:800;letter-spacing:.04em;line-height:1;min-width:42px;min-height:34px;padding:0 10px;cursor:pointer;transition:background .16s ease,color .16s ease,box-shadow .16s ease}
+.cloud247-language-button:hover{background:rgba(255,255,255,.09);color:#fff}
+.cloud247-language-button.is-active{background:#FFD83D;color:#061A2F;box-shadow:0 1px 0 rgba(255,255,255,.28) inset}
+.cloud247-language-button:focus-visible{outline:3px solid rgba(255,216,61,.42);outline-offset:2px}
+@media(max-width:620px){.cloud247-language-switch{position:absolute;right:0;top:50%;transform:translateY(-50%);margin-left:0}.cloud247-language-button{min-width:38px;min-height:32px;padding:0 8px;font-size:.74rem}}
