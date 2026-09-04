@@ -1,7 +1,13 @@
 const DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
 const TYPES = { A:1, NS:2, CNAME:5, SOA:6, MX:15, TXT:16, AAAA:28, DS:43, RRSIG:46, DNSKEY:48, TLSA:52, CAA:257 };
 const WEIGHTS = { dnssec:10, spf:12, dkim:12, dmarc:15, mtasts:8, tlsrpt:6, dane:8, caa:5, bimi:2, mxredundancy:6, ipv6mail:4, dnsconfig:6, certificate:6 };
-const commonSelectors = ['selector1','selector2','google','default','s1','s2','k1','dkim','mail','smtp'];
+const commonSelectors = [
+  'selector1','selector2','google','default','dkim','mail','smtp','email',
+  's1','s2','k1','k2','k3','key1','key2','dkim1','dkim2','m1','m2',
+  'mandrill','mailjet','smtpapi','protonmail','protonmail2','protonmail3',
+  'zoho','zmail','dk','dkim01','dkim02','mx','news','newsletter','send','postmark'
+];
+const DKIM_SCAN_CONCURRENCY = 8;
 const state = { report:null };
 
 const $ = id => document.getElementById(id);
@@ -29,6 +35,86 @@ function check(severity,label,subtitle,detail,records=[],factor=0,extra={}){retu
 function cleanHost(s){return String(s||'').replace(/\.$/,'');}
 function mxRows(r){return answers(r,'MX').map(x=>{const m=String(x.data).match(/^(\d+)\s+(.+)$/);return m?{priority:Number(m[1]),host:cleanHost(m[2])}:{priority:0,host:cleanHost(x.data)};}).sort((a,b)=>a.priority-b.priority);}
 
+function dnsHost(value=''){return String(value||'').trim().toLowerCase().replace(/^\d+\s+/,'').replace(/\.$/,'');}
+function mxHosts(r){return answers(r,'MX').map(x=>dnsHost(x.data)).filter(Boolean);}
+function nsHosts(r){return answers(r,'NS').map(x=>dnsHost(x.data)).filter(Boolean);}
+function cnameHosts(r){return answers(r,'CNAME').map(x=>dnsHost(x.data)).filter(Boolean);}
+function validDkimRecord(record){const tags=parseTags(record);return Boolean(tags.p&&tags.p.trim());}
+function revokedDkimRecord(record){const tags=parseTags(record);return Object.prototype.hasOwnProperty.call(tags,'p')&&!tags.p.trim();}
+function dkimTxtRecords(r){return txtValues(r).filter(v=>/^v=DKIM1\b/i.test(v)||/(?:^|;)\s*p\s*=/.test(v));}
+function unique(values){return [...new Set(values.filter(Boolean))];}
+
+function detectProviders(mxResult,nsResult,rootTxtResult){
+  const mx=mxHosts(mxResult), ns=nsHosts(nsResult), rootTxt=txtValues(rootTxtResult).join(' ').toLowerCase(), providers=[];
+  const add=(id,name,evidence,selectors=[],extra={})=>{if(!evidence.length||providers.some(p=>p.id===id))return;providers.push({id,name,evidence,selectors,...extra});};
+
+  const isDsMx=h=>h==='mx.domeneshop.no'||h.endsWith('.domeneshop.no');
+  const isDsNs=h=>/^ns[123]\.hyp\.net$/.test(h)||h.endsWith('.domeneshop.no');
+  const dsMx=mx.some(isDsMx), dsNs=ns.some(isDsNs);
+  const dsMxManaged=mx.length>0&&mx.every(isDsMx), dsNsManaged=ns.length>=2&&ns.every(isDsNs);
+  const dsSpf=rootTxt.includes('_spf.domeneshop.no');
+  add('domeneshop','Domeneshop',[dsMx?'MX: mx.domeneshop.no':'',dsNs?'NS: ns1/ns2/ns3.hyp.net':'',dsSpf?'SPF: _spf.domeneshop.no':''].filter(Boolean),[],{autoDkim:Boolean(dsMxManaged&&dsNsManaged),confidence:dsMxManaged&&dsNsManaged?'high':'medium'});
+
+  const isOneMx=h=>h==='mx.one.com'||h.endsWith('.mx.one.com')||h.endsWith('.mx.service.one')||/^mx\d+\.pub\.mailpod[0-9a-z-]*\.one\.com$/.test(h);
+  const isOneNs=h=>/^(?:ns0?[12]|ns[12])\.one\.com$/.test(h);
+  const oneMx=mx.some(isOneMx), oneNs=ns.some(isOneNs);
+  const oneMxManaged=mx.length>0&&mx.every(isOneMx), oneNsManaged=ns.length>=2&&ns.every(isOneNs);
+  const oneSpf=rootTxt.includes('_custspf.one.com');
+  add('onecom','one.com',[oneMx?'MX: one.com':'',oneNs?'NS: ns01/ns02.one.com':'',oneSpf?'SPF: _custspf.one.com':''].filter(Boolean),[],{autoDkim:Boolean(oneMxManaged&&oneNsManaged),confidence:oneMxManaged&&oneNsManaged?'high':'medium',opaqueSelectors:true});
+
+  const m365Mx=mx.some(h=>h.endsWith('.mail.protection.outlook.com')), m365Spf=rootTxt.includes('spf.protection.outlook.com');
+  add('microsoft365','Microsoft 365',[m365Mx?'MX: mail.protection.outlook.com':'',m365Spf?'SPF: spf.protection.outlook.com':''].filter(Boolean),['selector1','selector2']);
+
+  const googleMx=mx.some(h=>h==='aspmx.l.google.com'||h.endsWith('.google.com')||h.endsWith('.googlemail.com')), googleSpf=rootTxt.includes('_spf.google.com');
+  add('google','Google Workspace',[googleMx?'MX: Google':'',googleSpf?'SPF: _spf.google.com':''].filter(Boolean),['google']);
+
+  const sendgrid=rootTxt.includes('sendgrid.net')||mx.some(h=>h.endsWith('.sendgrid.net'));
+  add('sendgrid','SendGrid',[sendgrid?'SPF/MX: sendgrid.net':''].filter(Boolean),['s1','s2']);
+
+  const brevo=rootTxt.includes('spf.sendinblue.com')||rootTxt.includes('spf.brevo.com')||rootTxt.includes('sendinblue.com');
+  add('brevo','Brevo',[brevo?'SPF: Brevo/Sendinblue':''].filter(Boolean),[]);
+
+  const mailgun=rootTxt.includes('mailgun.org')||mx.some(h=>h.endsWith('.mailgun.org'));
+  add('mailgun','Mailgun',[mailgun?'SPF/MX: mailgun.org':''].filter(Boolean),['s1','s2']);
+
+  const postmark=rootTxt.includes('spf.mtasv.net')||rootTxt.includes('postmarkapp.com');
+  add('postmark','Postmark',[postmark?'SPF: mtasv.net/Postmark':''].filter(Boolean),['postmark']);
+
+  const ses=rootTxt.includes('amazonses.com')||mx.some(h=>h.endsWith('.amazonses.com'));
+  add('amazonses','Amazon SES',[ses?'SPF/MX: amazonses.com':''].filter(Boolean),[],{opaqueSelectors:true});
+
+  const mailchimp=rootTxt.includes('servers.mcsv.net')||rootTxt.includes('spf.mandrillapp.com')||rootTxt.includes('mandrillapp.com');
+  add('mailchimp','Mailchimp / Mandrill',[mailchimp?'SPF: Mailchimp/Mandrill':''].filter(Boolean),['k1','k2','k3','mandrill']);
+  return providers;
+}
+
+async function mapLimit(items,limit,worker){
+  const out=new Array(items.length);let next=0;
+  const runners=Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;out[i]=await worker(items[i],i);}});
+  await Promise.all(runners);return out;
+}
+async function resolveDkimTarget(name,depth=0,seen=new Set()){
+  const normalized=dnsHost(name);
+  if(!normalized||depth>4||seen.has(normalized))return {txt:[],chain:[],error:'CNAME-kjeden kunne ikke løses sikkert'};
+  seen.add(normalized);
+  const [txtResult,cnameResult]=await Promise.all([dnsQuery(normalized,'TXT'),dnsQuery(normalized,'CNAME')]);
+  const txt=dkimTxtRecords(txtResult);
+  if(txt.length)return {txt,chain:[],raw:{txt:txtResult,cname:cnameResult}};
+  const targets=cnameHosts(cnameResult);
+  if(!targets.length)return {txt:[],chain:[],raw:{txt:txtResult,cname:cnameResult}};
+  const target=targets[0], child=await resolveDkimTarget(target,depth+1,seen);
+  return {txt:child.txt,chain:[target,...(child.chain||[])],raw:{txt:txtResult,cname:cnameResult,child:child.raw},error:child.error};
+}
+async function lookupDkimSelector(domain,selector){
+  const host=`${selector}._domainkey.${domain}`;
+  try{
+    const resolved=await resolveDkimTarget(host), records=resolved.txt||[], valid=records.filter(validDkimRecord), revoked=records.filter(revokedDkimRecord), hasCname=(resolved.chain||[]).length>0;
+    let state='none';if(valid.length)state='valid';else if(revoked.length)state='revoked';else if(records.length||hasCname)state='broken';
+    return {selector,host,state,records,cnameChain:resolved.chain||[],error:resolved.error||'',raw:resolved.raw};
+  }catch(err){return {selector,host,state:'lookup-error',records:[],cnameChain:[],error:err?.message||String(err)};}
+}
+function providerSelectorList(providers){return unique(providers.flatMap(p=>p.selectors||[]));}
+
 function evalDnssec(base,ds,dnskey){
   const dsRows=answers(ds,'DS'), keys=answers(dnskey,'DNSKEY');
   if(dsRows.length && base?.AD===true) return check('good','Validert','DNSSEC er aktivt og validert','Resolveren returnerte autentisert DNS-data (AD) og domenet har DS-poster.',dsRows.map(x=>x.data),1);
@@ -45,12 +131,37 @@ function evalSpf(r){
   if(mech==='~') return check('warn','Softfail','SPF avsluttes med ~all','Policyen er publisert, men softfail er mindre tydelig enn -all når alle legitime avsendere er kjent.',[rec],.75);
   return check('warn','Bør vurderes','SPF finnes, men avslutningen er svak eller uklar','Kontroller at alle legitime avsendere er med og vurder en tydelig avslutning.',[rec],.6);
 }
-function evalDkim(results,selectors,customProvided){
-  const found=[];
-  results.forEach((r,i)=>{const rec=txtValues(r).find(v=>/^v=DKIM1\b/i.test(v)||/\bp=/i.test(v));if(rec)found.push({selector:selectors[i],record:rec});});
-  if(found.length) return check('good','Funnet',`${found.length} DKIM-selector${found.length===1?'':'er'} bekreftet`,'Minst én offentlig DKIM-nøkkel ble funnet. Dette bekrefter at den aktuelle selectoren er publisert.',found.map(x=>`${x.selector}: ${x.record}`),1,{found});
-  if(customProvided) return check('bad','Ikke funnet','Oppgitt DKIM-selector mangler','Ingen DKIM-nøkkel ble funnet for selectoren du oppga. Kontroller selector og DNS-konfigurasjon.',[],0,{found});
-  return check('warn','Ikke bekreftet','Ingen vanlige DKIM-selectorer ble funnet','DKIM-selectorer er ikke standardiserte. Domenet kan fortsatt bruke DKIM; oppgi korrekt selector fra e-postleverandøren for en sikker kontroll.',[],.5,{found});
+function evalDkim(lookups,providers){
+  const valid=(lookups||[]).filter(x=>x.state==='valid');
+  const broken=(lookups||[]).filter(x=>x.state==='broken'||x.state==='revoked');
+  const lookupErrors=(lookups||[]).filter(x=>x.state==='lookup-error');
+  const providerNames=(providers||[]).map(p=>p.name);
+  const providerText=providerNames.length?` Identifisert e-postleverandør: ${providerNames.join(', ')}.`:'';
+
+  if(valid.length){
+    const records=valid.flatMap(x=>x.records.map(r=>`${x.selector}${x.cnameChain.length?` -> ${x.cnameChain.join(' -> ')}`:''}: ${r}`));
+    return check('good','Verifisert',`${valid.length} DKIM-selector${valid.length===1?'':'er'} verifisert`,`Minst én gyldig offentlig DKIM-nøkkel ble funnet. TXT og CNAME-kjeder kontrolleres.${providerText}`,records,1,{found:valid,broken,verificationMethod:'dns',providers:providerNames});
+  }
+  if(broken.length){
+    const records=broken.map(x=>`${x.selector}${x.cnameChain.length?` -> ${x.cnameChain.join(' -> ')}`:''}: ${x.state==='revoked'?'tom offentlig nøkkel (p=)':'CNAME/TXT ble funnet, men ingen gyldig offentlig nøkkel kunne valideres'}`);
+    return check('bad','DKIM-feil','DKIM-post funnet, men valideringen feilet',`Mail Security Score fant en eksplisitt DKIM-post eller CNAME-kjede, men kunne ikke validere en aktiv offentlig nøkkel.${providerText}`,records,0,{found:[],broken,verificationMethod:'dns-error',providers:providerNames});
+  }
+
+  const domeneshop=(providers||[]).find(p=>p.id==='domeneshop'&&p.autoDkim);
+  if(domeneshop)return check('good','Automatisk aktivert','Domeneshop håndterer DNS og e-post','MX peker til mx.domeneshop.no og autoritative navneservere peker til Domeneshops ns1/ns2/ns3.hyp.net. Domeneshop oppgir at SPF, DKIM og DMARC settes opp automatisk når alle tjenestene ligger hos dem. Statusen er derfor bekreftet via leverandøroppsett selv om en unik DKIM-selector ikke ble oppdaget automatisk.',['Provider: Domeneshop','Deteksjon: MX + autoritative NS','DKIM: automatisk administrert av Domeneshop'],1,{found:[],broken:[],verificationMethod:'provider-assurance',providers:['Domeneshop']});
+
+  const onecom=(providers||[]).find(p=>p.id==='onecom');
+  if(onecom?.autoDkim)return check('good','Automatisk aktivert','one.com håndterer DNS og e-post','MX peker til one.com sine e-postservere og autoritative navneservere er one.com sine ns01/ns02.one.com. one.com oppgir at DKIM aktiveres automatisk når både deres navneservere og e-postservere brukes. Statusen er derfor bekreftet via leverandøroppsett selv om de leverandørstyrte DKIM-selectorene ikke ble oppdaget automatisk.',['Provider: one.com','Deteksjon: MX + autoritative NS','DKIM: automatisk administrert av one.com'],1,{found:[],broken:[],verificationMethod:'provider-assurance',providers:['one.com']});
+
+  const ses=(providers||[]).some(p=>p.id==='amazonses');
+  const onecomExternal=(providers||[]).some(p=>p.id==='onecom'&&!p.autoDkim);
+  const detail=onecomExternal
+    ? `one.com ble identifisert som e-postleverandør, men domenet bruker ikke et komplett one.com-navneserveroppsett. one.com bruker domenespesifikke DKIM CNAME-poster når eksterne navneservere brukes, og disse selectorene kan ikke oppdages eller gjettes sikkert fra domenenavnet alene. Kontroller de konkrete DKIM-postene one.com har oppgitt for domenet.${providerText}`
+    : ses
+      ? `Ingen gyldig DKIM-nøkkel ble funnet med selectorene som ble testet. Amazon SES kan bruke unike Easy DKIM-selector-tokens som ikke kan gjettes fra domenenavnet alene.${providerText}`
+      : `Ingen gyldig DKIM-nøkkel ble funnet med kjente eller leverandørspesifikke selectorer. DKIM-selectorer er ikke standardiserte, så dette beviser ikke at domenet mangler DKIM.${providerText}`;
+  const errorNote=lookupErrors.length?` ${lookupErrors.length} selector-oppslag fikk i tillegg en DNS-/nettverksfeil.`:'';
+  return check('warn','Kunne ikke bekreftes','Ingen kjent DKIM-selector ble verifisert',detail+errorNote,[],.5,{found:[],broken:[],verificationMethod:'not-confirmed',providers:providerNames,lookupErrors});
 }
 function evalDmarc(r){
   const rec=firstTxt(r,'v=DMARC1');
@@ -68,8 +179,8 @@ function evalBimi(r){const rec=firstTxt(r,'v=BIMI1');return rec?check('good','Pu
 function evalMxRedundancy(mx){
   const rows=mxRows(mx), real=rows.filter(x=>x.host!=='.');
   if(rows.some(x=>x.host==='.')) return check('info','Null MX','Domenet annonserer at det ikke mottar e-post','MX 0 . brukes for domener som eksplisitt ikke skal motta e-post.',rows.map(x=>`${x.priority} ${x.host}`),.8,{rows});
-  if(real.length>=2) return check('good','Redundant',`${real.length} MX-servere funnet`,'Flere MX-mål gir bedre robusthet dersom én mottaksserver er utilgjengelig.',real.map(x=>`${x.priority} ${x.host}`),1,{rows:real});
-  if(real.length===1) return check('warn','Én MX','Kun én MX-server funnet','Én MX kan være korrekt hos en skyleverandør, men gir mindre synlig DNS-redundans.',real.map(x=>`${x.priority} ${x.host}`),.65,{rows:real});
+  if(real.length===1) return check('good','Konfigurert','1 MX-post – gyldig oppsett','Én gyldig MX-post er en normal og korrekt konfigurasjon. Flere MX-poster er bare nødvendig når e-postleverandøren bruker flere mottaksservere, for eksempel for redundans.',real.map(x=>`${x.priority} ${x.host}`),1,{rows:real});
+  if(real.length>1) return check('good','Konfigurert',`${real.length} MX-poster – gyldig oppsett`,'MX-postene er gyldige og angir hvilke servere som mottar e-post for domenet. Antall MX-poster styres av e-postleverandørens arkitektur og er ikke i seg selv et kvalitetskrav.',real.map(x=>`${x.priority} ${x.host}`),1,{rows:real});
   return check('bad','Mangler','Ingen MX-servere funnet','Domenet har ingen vanlig MX-konfigurasjon for mottak av e-post.',[],0,{rows:[]});
 }
 function evalIpv6(mxDetails){
@@ -110,18 +221,21 @@ async function scanDomain(domain,selectorInput,scanCommon){
     const [aaaaR,tlsaR]=await Promise.all([dnsQuery(row.host,'AAAA'),dnsQuery(`_25._tcp.${row.host}`,'TLSA')]);
     return {...row,aaaa:answers(aaaaR,'AAAA').map(x=>x.data),tlsa:answers(tlsaR,'TLSA').map(x=>x.data),tlsaAD:tlsaR.AD===true};
   }));
+  const providers=detectProviders(mx,ns,txt);
   let selectors=[]; const customProvided=Boolean(selectorInput.trim());
   if(customProvided) selectors.push(...selectorInput.split(',').map(s=>s.trim()).filter(Boolean));
-  if(scanCommon) selectors.push(...commonSelectors);
-  selectors=[...new Set(selectors.map(s=>s.replace(/\._domainkey.*$/,'').toLowerCase()).filter(s=>/^[a-z0-9_-]{1,63}$/i.test(s)))].slice(0,18);
-  $('loadingText').textContent=selectors.length?`Sjekker ${selectors.length} DKIM-selectorer`:'Beregner score';
-  const dkimResults=selectors.length?await Promise.all(selectors.map(s=>dnsQuery(`${s}._domainkey.${domain}`,'TXT'))):[];
+  selectors.push(...providerSelectorList(providers));
+  const providerAssuredDkim=providers.some(p=>p.autoDkim);
+  if(scanCommon&&!providerAssuredDkim) selectors.push(...commonSelectors);
+  selectors=unique(selectors.map(s=>s.replace(/\._domainkey.*$/,'').toLowerCase()).filter(s=>/^[a-z0-9_-]{1,63}$/i.test(s))).slice(0,48);
+  $('loadingText').textContent=selectors.length?`Sjekker ${selectors.length} DKIM-selector${selectors.length===1?'':'er'} (TXT + CNAME)`:'Vurderer e-postleverandør og policyer';
+  const dkimLookups=selectors.length?await mapLimit(selectors,DKIM_SCAN_CONCURRENCY,s=>lookupDkimSelector(domain,s)):[];
   const dnssec=evalDnssec(a,ds,dnskey);
   const certificate=await certificatePromise;
   const checks={
     dnssec,
     spf:evalSpf(txt),
-    dkim:evalDkim(dkimResults,selectors,customProvided),
+    dkim:evalDkim(dkimLookups,providers),
     dmarc:evalDmarc(dmarc),
     mtasts:evalMtaSts(mtasts),
     tlsrpt:evalTlsRpt(tlsrpt),
@@ -133,11 +247,11 @@ async function scanDomain(domain,selectorInput,scanCommon){
     dnsconfig:evalDnsConfig(ns,soa,a,aaaa),
     certificate
   };
-  return {domain,scannedAt:new Date().toISOString(),selectorsChecked:selectors,checks,mxDetails,raw:{a,aaaa,ns,soa,mx,txt,ds,dnskey,caa,dmarc,mtasts,tlsrpt,bimi,dkim:dkimResults}};
+  return {domain,scannedAt:new Date().toISOString(),selectorsChecked:selectors,providers,checks,mxDetails,raw:{a,aaaa,ns,soa,mx,txt,ds,dnskey,caa,dmarc,mtasts,tlsrpt,bimi,dkim:dkimLookups.map(x=>x.raw)}};
 }
 
 const META={
-  dnssec:['DNSSEC','DNS-integritet'],spf:['SPF','Autoriserte avsendere'],dkim:['DKIM','Signering av utgående e-post'],dmarc:['DMARC','Policy mot spoofing'],mtasts:['MTA-STS','TLS-policy for SMTP'],tlsrpt:['TLS-RPT','Rapportering av TLS-feil'],dane:['DANE/TLSA','DNSSEC-bundet SMTP TLS'],caa:['CAA','Sertifikatutstedere'],bimi:['BIMI','Merkevareindikasjon'],mxredundancy:['MX-redundans','Robust e-postmottak'],ipv6mail:['IPv6 e-post','Nettverksstøtte'],dnsconfig:['DNS-konfigurasjon','Autoritativ robusthet'],certificate:['Sertifikatstatus','HTTPS/TLS på domenet']
+  dnssec:['DNSSEC','DNS-integritet'],spf:['SPF','Autoriserte avsendere'],dkim:['DKIM','Signering av utgående e-post'],dmarc:['DMARC','Policy mot spoofing'],mtasts:['MTA-STS','TLS-policy for SMTP'],tlsrpt:['TLS-RPT','Rapportering av TLS-feil'],dane:['DANE/TLSA','DNSSEC-bundet SMTP TLS'],caa:['CAA','Sertifikatutstedere'],bimi:['BIMI','Merkevareindikasjon'],mxredundancy:['MX-konfigurasjon','E-postruting'],ipv6mail:['IPv6 e-post','Nettverksstøtte'],dnsconfig:['DNS-konfigurasjon','Autoritativ robusthet'],certificate:['Sertifikatstatus','HTTPS/TLS på domenet']
 };
 const ICON={good:'✓',warn:'!',bad:'×',info:'i'};
 
@@ -150,14 +264,14 @@ function recommendationFor(key,c,domain){
   const map={
     dmarc:['Styrk DMARC-policyen',c.label==='Mangler'?`Publiser først en DMARC-post på _dmarc.${domain} med p=none og rapportering. Når alle legitime avsendere er bekreftet, gå gradvis til quarantine og reject.`:'Når DMARC-rapportene viser at legitim e-post passerer, øk håndhevingen mot p=reject og pct=100.'],
     spf:['Rydd opp i SPF',c.label==='Mangler'?'Kartlegg alle tjenester som sender e-post for domenet og publiser én samlet v=spf1-post.':'Kontroller alle include/ip-mekanismer og avslutningen av SPF-policyen.'],
-    dkim:['Bekreft DKIM','Finn korrekt DKIM-selector hos e-postleverandøren, publiser nøkkelen/CNAME-posten og test selectoren eksplisitt.'],
+    dkim:['Bekreft DKIM',c.verificationMethod==='not-confirmed'?'Finn korrekt DKIM-selector hos e-postleverandøren eller fra DKIM-Signature-headeren i en sendt e-post, og test den eksplisitt. Manglende automatisk funn betyr ikke at DKIM mangler.':'Kontroller DKIM-posten som ble funnet mot e-postleverandørens forventede TXT- eller CNAME-verdi.'],
     dnssec:['Aktiver eller reparer DNSSEC','Aktiver DNSSEC hos DNS-leverandøren og sørg for at korrekt DS-post er publisert hos registraren. DANE/TLSA er avhengig av dette.'],
     mtasts:['Aktiver MTA-STS','Publiser _mta-sts TXT-posten og en gyldig policy på mta-sts.<domene> slik at avsendere kan kreve autentisert TLS.'],
     tlsrpt:['Aktiver TLS-RPT',`Publiser en TXT-post på _smtp._tls.${domain} med v=TLSRPTv1 og en rapportadresse du faktisk mottar eller analyserer.`],
     dane:['Vurder DANE/TLSA','Når DNSSEC er stabilt, publiser TLSA-poster på _25._tcp for MX-serverne og sørg for at de matcher SMTP-sertifikatet.'],
     caa:['Publiser CAA','Begrens hvilke sertifikatutstedere som får utstede sertifikater for domenet med CAA.'],
     bimi:['Vurder BIMI','Hvis domenet har sterk DMARC-håndheving, kan BIMI brukes som et valgfritt merkevarelag hos støttede mottakere.'],
-    mxredundancy:['Vurder MX-redundans','Kontroller at e-postleverandøren tilbyr flere uavhengige MX-mål eller at dagens single-MX-oppsett har leverandørens innebygde redundans.'],
+    mxredundancy:['Konfigurer MX','Publiser MX-posten eller MX-postene e-postleverandøren krever. Én gyldig MX-post er en normal og korrekt konfigurasjon når leverandøren bruker ett mottaksmål.'],
     ipv6mail:['Vurder IPv6 på MX','Hvis e-postplattformen støtter IPv6, publiser AAAA-adresser for MX-serverne og test SMTP over IPv6 før aktivering.'],
     dnsconfig:['Styrk DNS-grunnlaget','Bruk minst to autoritative navneservere og kontroller SOA/delegering hos registraren.'],
     certificate:['Kontroller HTTPS/TLS','Test domenets sertifikat i nettleser eller et dedikert TLS-verktøy. Denne statiske appen kan bare bekrefte om nettleseren klarer en betrodd HTTPS-forbindelse.']
@@ -172,7 +286,7 @@ function fixData(key,c,domain){
   const common={
     dmarc:{title:'Forslag til trygg DMARC-utrulling',steps:['Start med p=none og samle rapporter.','Bekreft at alle legitime avsendere passerer SPF/DKIM med alignment.','Flytt gradvis til p=quarantine.','Bruk p=reject når legitim trafikk er under kontroll.'],record:{name:`_dmarc.${domain}`,type:'TXT',value:`v=DMARC1; p=none; rua=mailto:dmarc@${domain}; pct=100`},warning:`dmarc@${domain} er bare et eksempel. Bruk en adresse eller rapporttjeneste som faktisk tar imot DMARC-rapporter.`},
     spf:{title:'Slik bygger du SPF riktig',steps:['Lag liste over alle systemer som sender e-post for domenet.','Hent offisiell SPF include-verdi fra hver leverandør.','Slå alt sammen i én v=spf1-post.','Test før du strammer til -all.'],record:{name:domain,type:'TXT',value:'v=spf1 include:<VERDI-FRA-E-POSTLEVERANDØR> -all'},warning:'Ikke kopier plassholderen direkte. Feil SPF kan blokkere legitim e-post.'},
-    dkim:{title:'Slik får du bekreftet DKIM',steps:['Aktiver DKIM hos e-postleverandøren.','Kopier selectoren og DNS-posten leverandøren viser.','Publiser TXT- eller CNAME-posten nøyaktig som oppgitt.','Skriv selectoren i feltet øverst og test igjen.'],record:{name:`<selector>._domainkey.${domain}`,type:'TXT eller CNAME',value:'<VERDI-FRA-E-POSTLEVERANDØREN>'},warning:'En ekte DKIM-nøkkel kan ikke genereres av dette verktøyet. Den må komme fra systemet som signerer e-posten.'},
+    dkim:c.verificationMethod==='not-confirmed'?{title:'Slik bekrefter du DKIM',steps:['Finn DKIM-selectoren hos e-postleverandøren, eller les s=-verdien i DKIM-Signature-headeren fra en faktisk sendt e-post.','Skriv selectoren i DKIM-feltet i Mail Security Score og kjør testen på nytt.','Hvis leverandørens kontrollpanel sier at DKIM ikke er aktivert, aktiver DKIM og publiser nøyaktig TXT- eller CNAME-posten leverandøren oppgir.'],record:null,warning:'Ikke opprett en ny DKIM-post bare fordi Mail Security Score ikke fant en kjent selector. Manglende automatisk funn er ikke det samme som at DKIM mangler.'}:{title:'Slik retter du DKIM-feilen',steps:['Kontroller DKIM-selectoren som ble funnet og sammenlign den med verdien hos e-postleverandøren.','Hvis posten er en CNAME, kontroller at hele CNAME-kjeden peker til en aktiv DKIM-nøkkel.','Hvis p= er tom, er nøkkelen tilbakekalt og må erstattes eller roteres hos leverandøren.','Publiser leverandørens korrekte TXT- eller CNAME-verdi og test på nytt.'],record:{name:`<selector>._domainkey.${domain}`,type:'TXT eller CNAME',value:'<KORREKT-VERDI-FRA-E-POSTLEVERANDØREN>'},warning:'Ikke generer eller endre DKIM-nøkkelen manuelt med mindre e-postplattformen eksplisitt krever det.'},
     tlsrpt:{title:'Aktiver SMTP TLS-rapportering',steps:['Opprett en adresse eller rapporttjeneste som mottar TLS-RPT.','Publiser TXT-posten under _smtp._tls.','Følg opp rapporterte TLS-feil.'],record:{name:`_smtp._tls.${domain}`,type:'TXT',value:`v=TLSRPTv1; rua=mailto:tlsrpt@${domain}`},warning:`tlsrpt@${domain} er et eksempel og må eksistere eller erstattes.`},
     mtasts:{title:'Aktiver MTA-STS',steps:['Publiser _mta-sts TXT-posten med en policy-ID.','Sett opp HTTPS på mta-sts-domenet.','Publiser /.well-known/mta-sts.txt med korrekt MX-mønster.','Start gjerne i testing-modus før enforce.'],record:{name:`_mta-sts.${domain}`,type:'TXT',value:'v=STSv1; id=20260810'},warning:'MTA-STS krever også en policyfil over HTTPS. MX-verdier må tilpasses e-postleverandøren.'},
     dane:{title:'Aktiver DANE for SMTP',steps:['Sørg først for fullt validert DNSSEC.','Hent riktig sertifikat/SPKI-hash fra hver SMTP MX-server.','Publiser TLSA på _25._tcp.<mx-host>.','Test at TLSA fortsatt matcher etter sertifikatfornyelser.'],record:{name:'_25._tcp.<mx-server>',type:'TLSA',value:'<usage> <selector> <matching-type> <sertifikatdata>'},warning:'Ikke publiser en tilfeldig TLSA-verdi. Feil TLSA kan føre til leveringsproblemer hos DANE-validerende avsendere.'},
@@ -208,7 +322,8 @@ function renderChecks(report){
 function renderAside(report){
   $('mxList').innerHTML=report.mxDetails.length?report.mxDetails.map(mx=>`<div class="mini-item"><strong>${esc(mx.host)}</strong><span>Prioritet ${mx.priority}</span><div class="mx-badges"><span class="mx-badge ${mx.aaaa.length?'good':'info'}">IPv6 ${mx.aaaa.length?'ja':'nei'}</span><span class="mx-badge ${mx.tlsa.length?'good':'info'}">TLSA ${mx.tlsa.length?'ja':'nei'}</span></div></div>`).join(''):'<div class="empty-mini">Ingen vanlige MX-servere funnet.</div>';
   const nss=answers(report.raw.ns,'NS').map(x=>cleanHost(x.data)), root4=answers(report.raw.a,'A').length, root6=answers(report.raw.aaaa,'AAAA').length;
-  $('dnsOverview').innerHTML=`<div><dt>Navneservere</dt><dd>${nss.length}</dd></div><div><dt>DNSSEC</dt><dd>${esc(report.checks.dnssec.label)}</dd></div><div><dt>IPv4 på domene</dt><dd>${root4?'Ja':'Nei'}</dd></div><div><dt>IPv6 på domene</dt><dd>${root6?'Ja':'Nei'}</dd></div><div><dt>MX-servere</dt><dd>${report.mxDetails.length}</dd></div><div><dt>DANE/TLSA</dt><dd>${esc(report.checks.dane.label)}</dd></div>`;
+  const providerNames=(report.providers||[]).map(p=>p.name), dkimMethod={'dns':'DNS-verifisert','provider-assurance':'Leverandørbekreftet','not-confirmed':'Ikke bekreftet','dns-error':'DNS-feil'}[report.checks.dkim.verificationMethod]||'Ukjent';
+  $('dnsOverview').innerHTML=`<div><dt>Navneservere</dt><dd>${nss.length}</dd></div><div><dt>DNSSEC</dt><dd>${esc(report.checks.dnssec.label)}</dd></div><div><dt>IPv4 på domene</dt><dd>${root4?'Ja':'Nei'}</dd></div><div><dt>IPv6 på domene</dt><dd>${root6?'Ja':'Nei'}</dd></div><div><dt>MX-servere</dt><dd>${report.mxDetails.length}</dd></div><div><dt>DANE/TLSA</dt><dd>${esc(report.checks.dane.label)}</dd></div><div><dt>E-postleverandør</dt><dd>${esc(providerNames.length?providerNames.join(', '):'Ikke identifisert')}</dd></div><div><dt>DKIM-verifisering</dt><dd>${esc(dkimMethod)}</dd></div>`;
 }
 
 $('scanForm').addEventListener('submit',async e=>{
