@@ -55,7 +55,7 @@ function detectProviders(mxResult,nsResult,rootTxtResult){
   const dsSpf=rootTxt.includes('_spf.domeneshop.no');
   add('domeneshop','Domeneshop',[dsMx?'MX: mx.domeneshop.no':'',dsNs?'NS: ns1/ns2/ns3.hyp.net':'',dsSpf?'SPF: _spf.domeneshop.no':''].filter(Boolean),[],{autoDkim:Boolean(dsMxManaged&&dsNsManaged),confidence:dsMxManaged&&dsNsManaged?'high':'medium'});
 
-  const isOneMx=h=>h==='mx.one.com'||h.endsWith('.mx.one.com')||h.endsWith('.mx.service.one')||/^mx\d+\.pub\.mailpod[0-9a-z-]*\.one\.com$/.test(h);
+  const isOneMx=h=>h==='mx.one.com'||h.endsWith('.mx.one.com')||h.endsWith('.mx.service.one')||/^mx\d+\.(?:pub\.)?mailpod[0-9a-z-]*(?:\.[0-9a-z-]+)*\.one\.com$/.test(h);
   const isOneNs=h=>/^(?:ns0?[12]|ns[12])\.one\.com$/.test(h);
   const oneMx=mx.some(isOneMx), oneNs=ns.some(isOneNs);
   const oneMxManaged=mx.length>0&&mx.every(isOneMx), oneNsManaged=ns.length>=2&&ns.every(isOneNs);
