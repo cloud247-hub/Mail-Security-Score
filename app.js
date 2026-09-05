@@ -1,6 +1,8 @@
 const DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
+const APP_VERSION = '2.4.2';
 const TYPES = { A:1, NS:2, CNAME:5, SOA:6, MX:15, TXT:16, AAAA:28, DS:43, RRSIG:46, DNSKEY:48, TLSA:52, CAA:257 };
-const WEIGHTS = { dnssec:10, spf:12, dkim:12, dmarc:15, mtasts:8, tlsrpt:6, dane:8, caa:5, bimi:2, mxredundancy:6, ipv6mail:4, dnsconfig:6, certificate:6 };
+const SCORE_WEIGHTS = { dnssec:10, spf:17, dkim:17, dmarc:23, mtasts:9, tlsrpt:6, dane:6, caa:2, mxredundancy:5, dnsconfig:5 };
+const CHECK_ORDER = ['dnssec','spf','dkim','dmarc','mtasts','tlsrpt','dane','caa','bimi','mxredundancy','ipv6mail','dnsconfig','certificate'];
 const commonSelectors = [
   'selector1','selector2','google','default','dkim','mail','smtp','email',
   's1','s2','k1','k2','k3','key1','key2','dkim1','dkim2','m1','m2',
@@ -198,9 +200,13 @@ function evalDnsConfig(ns,soa,a,aaaa){
 }
 function evalDane(mxDetails,dnssec){
   const tlsa=mxDetails.flatMap(x=>x.tlsa.map(v=>({host:x.host,value:v,validated:x.tlsaAD})));
-  if(tlsa.length && dnssec.factor>=1 && tlsa.every(x=>x.validated)) return check('good','DANE aktivt',`${tlsa.length} validerte TLSA-post${tlsa.length===1?'':'er'}`,'TLSA-poster på SMTP port 25 ble validert med DNSSEC. Dette kan binde SMTP TLS-identiteten til DNSSEC.',tlsa.map(x=>`_25._tcp.${x.host}: ${x.value}`),1,{tlsa});
-  if(tlsa.length) return check('bad','TLSA uten sikker kjede','TLSA finnes, men kan ikke stoles på via DNSSEC','DANE krever en gyldig DNSSEC-kjede. TLSA uten DNSSEC-validering gir ikke den tilsiktede autentiseringen.',tlsa.map(x=>`_25._tcp.${x.host}: ${x.value}`),0,{tlsa});
-  return check('info','Ikke aktivert','Ingen DANE/TLSA-poster funnet','DANE for SMTP er en avansert tilleggsmekanisme. Den krever DNSSEC og TLSA-poster for MX-serverne.',[],.45,{tlsa:[]});
+  const covered=mxDetails.filter(x=>x.tlsa.length>0);
+  const allMxCovered=mxDetails.length>0 && covered.length===mxDetails.length;
+  const allValidated=covered.length>0 && covered.every(x=>x.tlsaAD===true);
+  if(allMxCovered && dnssec.factor>=1 && allValidated) return check('good','DANE aktivt',`${covered.length}/${mxDetails.length} MX-servere er beskyttet`,'Alle MX-serverne har TLSA-poster på SMTP port 25 som ble validert med DNSSEC. DANE gir dermed autentisert binding mellom SMTP TLS og DNSSEC.',tlsa.map(x=>`_25._tcp.${x.host}: ${x.value}`),1,{tlsa,coveredMx:covered.length,totalMx:mxDetails.length});
+  if(covered.length && dnssec.factor>=1 && allValidated) return check('warn','Delvis DANE',`${covered.length}/${mxDetails.length} MX-servere har validert TLSA`,'DANE er bare aktivt for deler av MX-oppsettet. Full score krever gyldig, DNSSEC-validert TLSA på alle MX-serverne som kan motta e-post.',tlsa.map(x=>`_25._tcp.${x.host}: ${x.value}`),.5,{tlsa,coveredMx:covered.length,totalMx:mxDetails.length});
+  if(tlsa.length) return check('bad','TLSA uten sikker kjede','TLSA finnes, men kan ikke stoles på via DNSSEC','DANE krever en gyldig DNSSEC-kjede. TLSA uten DNSSEC-validering gir ikke den tilsiktede autentiseringen.',tlsa.map(x=>`_25._tcp.${x.host}: ${x.value}`),0,{tlsa,coveredMx:covered.length,totalMx:mxDetails.length});
+  return check('warn','Ikke aktivert','Ingen DANE/TLSA-poster funnet','DANE for SMTP styrker autentiseringen av SMTP TLS ved å binde MX-serverens TLS-identitet til DNSSEC. DANE inngår i sikkerhetsscoren og krever både DNSSEC og gyldige TLSA-poster på alle MX-serverne.',[],0,{tlsa:[],coveredMx:0,totalMx:mxDetails.length});
 }
 async function checkHttpsCertificate(domain){
   const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),7000);
@@ -247,7 +253,7 @@ async function scanDomain(domain,selectorInput,scanCommon){
     dnsconfig:evalDnsConfig(ns,soa,a,aaaa),
     certificate
   };
-  return {domain,scannedAt:new Date().toISOString(),selectorsChecked:selectors,providers,checks,mxDetails,raw:{a,aaaa,ns,soa,mx,txt,ds,dnskey,caa,dmarc,mtasts,tlsrpt,bimi,dkim:dkimLookups.map(x=>x.raw)}};
+  return {domain,appVersion:APP_VERSION,scannedAt:new Date().toISOString(),selectorsChecked:selectors,providers,checks,mxDetails,raw:{a,aaaa,ns,soa,mx,txt,ds,dnskey,caa,dmarc,mtasts,tlsrpt,bimi,dkim:dkimLookups.map(x=>x.raw)}};
 }
 
 const META={
@@ -255,10 +261,28 @@ const META={
 };
 const ICON={good:'✓',warn:'!',bad:'×',info:'i'};
 
-function totalScore(checks){return Math.round(Object.entries(WEIGHTS).reduce((sum,[k,w])=>sum+w*Math.max(0,Math.min(1,checks[k]?.factor??0)),0));}
+function scoreApplicability(key,c){
+  // Selector discovery is inherently incomplete. Do not penalize an inconclusive DKIM lookup.
+  if(key==='dkim' && c?.verificationMethod==='not-confirmed') return 0;
+  return 1;
+}
+function scoreFactor(key,c){
+  if(key==='mxredundancy' && c?.label==='Null MX') return 1;
+  return Math.max(0,Math.min(1,c?.factor??0));
+}
+function scoreStats(checks){
+  let earnedPoints=0, availablePoints=0;
+  Object.entries(SCORE_WEIGHTS).forEach(([key,weight])=>{
+    if(!scoreApplicability(key,checks[key])) return;
+    availablePoints+=weight;
+    earnedPoints+=weight*scoreFactor(key,checks[key]);
+  });
+  return {earnedPoints,availablePoints,score:availablePoints?Math.round((earnedPoints/availablePoints)*100):0};
+}
+function totalScore(checks){return scoreStats(checks).score;}
 function scoreLabel(s){return s>=90?'Svært sterk':s>=80?'Sterk':s>=65?'God':s>=50?'Bør forbedres':'Svak';}
-function earned(k,c){return Math.round(WEIGHTS[k]*c.factor*10)/10;}
-function gap(k,c){return Math.round((WEIGHTS[k]-WEIGHTS[k]*c.factor)*10)/10;}
+function earned(k,c){const w=SCORE_WEIGHTS[k]||0;return Math.round(w*scoreFactor(k,c)*10)/10;}
+function gap(k,c){const w=SCORE_WEIGHTS[k]||0;if(!w||!scoreApplicability(k,c))return 0;return Math.round((w-w*scoreFactor(k,c))*10)/10;}
 
 function recommendationFor(key,c,domain){
   const map={
@@ -310,9 +334,9 @@ function renderRecommendations(report){
   $('topRecommendations').querySelectorAll('[data-jump]').forEach(b=>b.addEventListener('click',()=>{const el=document.querySelector(`[data-check="${b.dataset.jump}"]`); if(el){el.classList.add('open');el.scrollIntoView({behavior:'smooth',block:'center'});}}));
 }
 function renderSummary(checks){const keys=['dmarc','spf','dkim','dnssec','dane'];$('summaryGrid').innerHTML=keys.map(k=>{const c=checks[k];return `<article class="summary-card"><div class="summary-top"><h4>${META[k][0]}</h4><span class="status-icon ${c.severity}">${ICON[c.severity]}</span></div><div class="summary-value">${esc(c.label)}</div><p>${esc(c.subtitle)}</p></article>`;}).join('');}
-function renderBreakdown(checks){$('scoreBreakdown').innerHTML=Object.keys(WEIGHTS).map(k=>{const c=checks[k], e=earned(k,c), pct=Math.round(c.factor*100);return `<div class="score-row ${c.severity}"><div class="score-row-name"><strong>${esc(META[k][0])}</strong><span>${esc(META[k][1])}</span></div><div class="score-bar"><span style="width:${pct}%"></span></div><div class="score-points">${e}<span> / ${WEIGHTS[k]}</span></div></div>`;}).join('');}
+function renderBreakdown(checks){$('scoreBreakdown').innerHTML=Object.keys(SCORE_WEIGHTS).map(k=>{const c=checks[k], applicable=Boolean(scoreApplicability(k,c)), e=applicable?earned(k,c):null, pct=applicable?Math.round(scoreFactor(k,c)*100):100;return `<div class="score-row ${c.severity}"><div class="score-row-name"><strong>${esc(META[k][0])}</strong><span>${esc(META[k][1])}</span></div><div class="score-bar"><span style="width:${pct}%"></span></div><div class="score-points">${applicable?e:'Nøytral'}<span>${applicable?` / ${SCORE_WEIGHTS[k]}`:' – ikke i score'}</span></div></div>`;}).join('');}
 function renderChecks(report){
-  $('checksList').innerHTML=Object.keys(WEIGHTS).map(k=>{const c=report.checks[k], fix=fixData(k,c,report.domain), recs=(c.records||[]).map(r=>`<div class="record-box">${esc(r)}</div>`).join('');
+  $('checksList').innerHTML=CHECK_ORDER.map(k=>{const c=report.checks[k], fix=fixData(k,c,report.domain), recs=(c.records||[]).map(r=>`<div class="record-box">${esc(r)}</div>`).join('');
     const fixHtml=fix?`<div class="fix-card"><div class="fix-card-head">Anbefalt tiltak</div><div class="fix-card-body"><ol>${fix.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol>${fix.record?`<div class="fix-record"><dl class="fix-record-grid"><dt>Navn</dt><dd>${esc(fix.record.name)}</dd><dt>Type</dt><dd>${esc(fix.record.type)}</dd><dt>Verdi</dt><dd>${esc(fix.record.value)}</dd></dl></div>`:''}<p class="fix-warning">${esc(fix.warning)}</p></div></div>`:'';
     const limit=k==='certificate'?`<div class="limit-note">Denne GitHub Pages-versjonen kan bare bekrefte om nettleseren klarer en betrodd HTTPS-forbindelse. Den kan ikke hente sertifikatets utløpsdato eller inspisere SMTP STARTTLS uten en egen backend/API.</div>`:'';
     return `<article class="check-item" data-check="${k}"><button class="check-toggle" type="button"><span class="status-icon ${c.severity}">${ICON[c.severity]}</span><span class="check-name"><strong>${esc(META[k][0])}</strong><span>${esc(META[k][1])}</span></span><span class="check-status ${c.severity}">${esc(c.label)}</span><span class="chevron">⌄</span></button><div class="check-detail"><p><strong>${esc(c.subtitle)}</strong></p><p>${esc(c.detail)}</p>${recs}${limit}${fixHtml}</div></article>`;

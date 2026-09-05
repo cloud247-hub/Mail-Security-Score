@@ -74,9 +74,9 @@
 <section class="panel" id="scoreDetails">
 <div class="panel-head">
 <div><p class="section-kicker">Slik bygges scoren</p><h3>Poeng per sikkerhetskontroll</h3></div>
-<span class="count-badge">13 kontroller</span>
+<span class="count-badge">9 poenggivende kontroller</span>
 </div>
-<div class="score-breakdown" id="scoreBreakdown"></div>
+<p class="muted">DKIM med ukjent selector er score-nøytral. DANE/TLSA inngår i scoren, mens IPv6, BIMI og HTTPS på rotdomenet vises som informative tilleggskontroller.</p><div class="score-breakdown" id="scoreBreakdown"></div>
 </section>
 <section class="panel">
 <div class="panel-head">
@@ -108,14 +108,14 @@
 <div class="feature-grid">
 <article><span>01</span><h3>Autentisering</h3><p>SPF, DKIM og DMARC vektes høyt fordi de er sentrale for å motvirke spoofing og domenemisbruk.</p></article>
 <article><span>02</span><h3>Transport</h3><p>MTA-STS, TLS-RPT og DANE/TLSA vurderer hvor godt domenet beskytter e-post på vei mellom servere.</p></article>
-<article><span>03</span><h3>Robusthet</h3><p>DNSSEC, MX-redundans, IPv6, CAA, DNS-konfigurasjon og HTTPS/TLS gir et bredere bilde av domenets tekniske helse.</p></article>
+<article><span>03</span><h3>Robusthet</h3><p>DNSSEC, DANE/TLSA, MX-konfigurasjon og DNS-grunnlaget inngår i scoren. IPv6, BIMI og HTTPS på rotdomenet vises som informative tilleggskontroller.</p></article>
 </div>
 </section>
 <section class="more-tools-section"><div class="shell"><div class="more-tools-card"><div><p class="cloud-eyebrow">CLOUD TOOLBOX</p><h2>Se mine andre verktøy</h2><p>Flere enkle verktøy for Microsoft 365, Intune, e-post og domenesikkerhet.</p></div><a class="tools-button" href="https://cloud247.no/">Gå til Cloud247 <span aria-hidden="true">→</span></a></div></div></section>
 </main>
-<footer class="cloud-footer"><div class="shell footer-inner"><span>© 2026 Cloud247</span><a href="https://cloud247.no/">cloud247.no</a></div></footer>
+<footer class="cloud-footer"><div class="shell footer-inner"><span>© 2026 Cloud247</span><span>v2.4.2</span><a href="https://cloud247.no/">cloud247.no</a></div></footer>
 </div>
-<script defer="" src="./app.js"></script>
-<script src="i18n.js"></script>
+<script defer="" src="./app.js?v=2.4.2"></script>
+<script src="i18n.js?v=2.4.2"></script>
 </body>
 </html>
