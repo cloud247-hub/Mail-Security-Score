@@ -125,3 +125,13 @@ footer:not(.cloud-footer){display:none!important}
 .cloud-hero .scan-card{padding:28px!important}
 .cloud-hero .scan-card .form-note{margin-bottom:0}
 @media(max-width:620px){.cloud-hero .scan-card{padding:22px!important}}
+.dmarc-cta{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:18px;align-items:center;margin:0 0 14px;padding:22px 26px;background:#fff;border:1px solid var(--cloud-line);border-left:4px solid var(--cloud-yellow-2);border-radius:16px}
+.dmarc-cta-icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--cloud-yellow-soft);color:#6b5200;font-size:20px}
+.dmarc-cta-copy .section-kicker{margin:0 0 4px;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.dmarc-cta-copy h3{margin:0 0 6px;font-size:17px;letter-spacing:-.01em;color:var(--cloud-ink)}
+.dmarc-cta-copy p{margin:0;color:var(--cloud-muted);font-size:12px;line-height:1.55}
+.dmarc-cta-copy .dmarc-cta-msp{margin-top:10px;color:var(--cloud-ink)}
+.dmarc-cta-tag{display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background:var(--cloud-navy);color:#fff;font-size:10px;font-weight:800;letter-spacing:.04em}
+.dmarc-cta-button{display:inline-flex;align-items:center;gap:14px;min-height:46px;padding:0 18px;border-radius:11px;background:var(--cloud-navy);color:#fff!important;font-size:13px;font-weight:800;text-decoration:none!important;white-space:nowrap}
+.dmarc-cta-button:hover{background:var(--cloud-navy-2)}
+@media (max-width:760px){.dmarc-cta{grid-template-columns:1fr;gap:14px;padding:20px}.dmarc-cta-icon{display:none}.dmarc-cta-button{grid-column:1/-1;justify-content:space-between}}

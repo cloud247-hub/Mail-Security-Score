@@ -90,6 +90,29 @@ window.CLOUD247_I18N_CONFIG = {
     "Domeneoversikt": "Domain overview",
     "Eksporter rapport": "Export report",
     "Last ned JSON": "Download JSON",
+    "DMARC-overvåking fra Cloud247": "DMARC monitoring from Cloud247",
+    "Få kontroll på hvem som sender e-post fra domenet ditt": "Take control of who sends email from your domain",
+    "Vi samler og tolker DMARC-rapportene for deg, viser hvilke tjenester som sender på vegne av domenet, og hjelper deg trygt over til håndhevet DMARC.": "We collect and interpret your DMARC reports, show which services send on behalf of your domain, and help you move safely to an enforced DMARC policy.",
+    "For MSP-er": "For MSPs",
+    "Vi har egen løsning for MSP-er som vil overvåke DMARC for alle kundedomenene sine samlet.": "We have a dedicated solution for MSPs who want to monitor DMARC for all their customer domains in one place.",
+    "Kom i gang med DMARC": "Get started with DMARC",
+    "Domenet mangler DMARC": "Domain is missing DMARC",
+    "Vi hjelper deg å sette opp DMARC, samler og tolker rapportene, og viser hvilke tjenester som sender på vegne av domenet – slik at du trygt kan gå over til håndheving.": "We help you set up DMARC, collect and interpret the reports, and show which services send on behalf of your domain – so you can move safely to enforcement.",
+    "DMARC står på p=none": "DMARC is set to p=none",
+    "Med p=none får du rapporter, men falske e-poster slippes fortsatt gjennom. Vi tolker rapportene for deg og hjelper deg trygt videre til quarantine og reject.": "With p=none you get reports, but spoofed emails still get through. We interpret the reports for you and help you move safely on to quarantine and reject.",
+    "Få hjelp til håndheving": "Get help with enforcement",
+    "DMARC står på p=quarantine": "DMARC is set to p=quarantine",
+    "Ta det siste steget til p=reject": "Take the final step to p=reject",
+    "Domenet er nesten i mål. Vi viser hvilke avsendere som fortsatt feiler DMARC, så du kan gå over til reject uten å stoppe legitim e-post.": "Your domain is almost there. We show which senders still fail DMARC, so you can move to reject without blocking legitimate email.",
+    "Få hjelp til p=reject": "Get help with p=reject",
+    "DMARC gjelder bare deler av trafikken": "DMARC only covers part of the traffic",
+    "Ta det siste steget til full håndheving": "Take the final step to full enforcement",
+    "Policyen omfatter ikke all e-post ennå. Vi viser hvilke avsendere som fortsatt feiler DMARC, så du trygt kan gå til pct=100.": "The policy does not cover all email yet. We show which senders still fail DMARC, so you can safely move to pct=100.",
+    "Få hjelp til full håndheving": "Get help with full enforcement",
+    "DMARC står på p=reject": "DMARC is set to p=reject",
+    "Behold kontrollen på DMARC over tid": "Stay in control of DMARC over time",
+    "Domenet har sterk DMARC-håndheving. Med løpende overvåking oppdager du nye avsendere og feilkonfigurasjoner før de stopper legitim e-post.": "Your domain has strong DMARC enforcement. With ongoing monitoring you catch new senders and misconfigurations before they block legitimate email.",
+    "Overvåk DMARC": "Monitor DMARC",
     "Poeng": "Points",
     "Kontroll": "Control",
     "Vekt": "Weight",
@@ -434,6 +457,14 @@ window.CLOUD247_I18N_CONFIG = {
     "CNAME-kjeden kunne ikke løses sikkert": "The CNAME chain could not be resolved safely"
   },
   "patterns": [
+    [
+      "^Uten DMARC kan andre utgi seg for å være (.+)$",
+      "Without DMARC, others can impersonate $1"
+    ],
+    [
+      "^(.+) overvåker, men stopper ikke forfalsket e-post$",
+      "$1 is monitoring, but not stopping spoofed email"
+    ],
     [
       "^Sjekker (\\d+) DKIM-selector(?:er)? \\(TXT \\+ CNAME\\)$",
       "Checking $1 DKIM selector(s) (TXT + CNAME)"
