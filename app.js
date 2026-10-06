@@ -1,5 +1,5 @@
 const DOH_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.5.1';
 const TYPES = { A:1, NS:2, CNAME:5, SOA:6, MX:15, TXT:16, AAAA:28, DS:43, RRSIG:46, DNSKEY:48, TLSA:52, CAA:257 };
 const SCORE_WEIGHTS = { dnssec:10, spf:17, dkim:17, dmarc:23, mtasts:9, tlsrpt:6, dane:6, caa:2, mxredundancy:5, dnsconfig:5 };
 const CHECK_ORDER = ['dnssec','spf','dkim','dmarc','mtasts','tlsrpt','dane','caa','bimi','mxredundancy','ipv6mail','dnsconfig','certificate'];
